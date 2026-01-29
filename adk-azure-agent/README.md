@@ -59,14 +59,61 @@ uv run adk web --port 9000
 
 1. **對話能力**：使用 Azure OpenAI 進行自然語言對話
 2. **時間查詢**：`get_current_time(city)` - 查詢指定城市時間
-3. **數學計算**：`calculate(expression)` - 執行數學運算
 
 ### 測試範例
 
 在 Web UI 或 CLI 中嘗試：
 - "你是誰？"
 - "現在台北幾點？"
-- "幫我計算 123 * 456"
+
+## 🔍 驗證 Agent 回覆準確性
+
+### 使用 `compare_agent_response.py` 比對工具
+
+此工具用於驗證 Agent 的最終回覆是否與原始 MCP JSON 資料完全一致，確保 Agent 沒有修改、刪除或添加任何內容。
+
+#### 使用步驟
+
+1. **從 Web UI 複製 Agent 的回覆**
+   - 在 Agent 查詢完股票後，複製其回覆的 JSON 資料
+   - 存成檔案，例如 `agent_response.json`
+
+2. **執行比對**
+   ```bash
+   python compare_agent_response.py <TICKER> <RESPONSE_FILE>
+   ```
+
+   範例：
+   ```bash
+   # 比對台積電 (2330.TW) 的資料
+   python compare_agent_response.py 2330.TW agent_response.json
+   
+   # 比對蘋果 (AAPL) 的資料
+   python compare_agent_response.py AAPL agent_response.json
+   ```
+
+3. **查看比對結果**
+   
+   工具會顯示：
+   - ✅ **完全一致**：Agent 回覆與原始 JSON 完全相同
+   - ❌ **發現差異**：
+     - 遺漏的欄位 (missing_keys)
+     - 多出來的欄位 (extra_keys)
+     - 值不同的欄位 (different_values)
+   - 📈 **統計資訊**：原始欄位數、回覆欄位數、相同欄位數
+
+#### 工作原理
+
+1. 讀取 `my_agent/mcp_logs/mcp_{TICKER}_*.jsonl` 中的最新記錄
+2. 從記錄中提取原始 Yahoo Finance API 回傳的 JSON
+3. 將其與 Agent 的回覆進行欄位級別的比對
+4. 輸出詳細的差異報告
+
+#### 注意事項
+
+- 此工具需要 `my_agent/mcp_logs/` 目錄中存在對應 ticker 的 log 檔案
+- 如果 Agent 使用了 `search` 工具，log 檔名可能是 `mcp_unknown_*.jsonl`
+- 比對結果可用於驗證 Agent 是否嚴格遵守「原封不動回傳」的指令
 
 ## 📁 專案結構
 
@@ -107,7 +154,7 @@ def your_custom_tool(param: str) -> dict:
 ```python
 root_agent = Agent(
     # ... 其他配置
-    tools=[get_current_time, calculate, your_custom_tool]
+    tools=[get_current_time, your_custom_tool]
 )
 ```
 

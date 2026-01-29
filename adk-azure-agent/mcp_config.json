@@ -2,7 +2,23 @@
   "mcpServers": {
     "yfinance": {
       "command": "uvx",
-      "args": ["yfmcp@latest"]
+      "args": [
+        "yfmcp@latest"
+      ]
+    },
+    "web-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@guhcostan/web-search-mcp"
+      ]
+    },
+    "fetch-webpage": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@sylphlab/tools-fetch-mcp"
+      ]
     }
   }
 }
