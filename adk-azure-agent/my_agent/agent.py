@@ -146,6 +146,28 @@ def load_mcp_config():
         print(f"❌ Error loading mcp_config.json: {e}")
         return {}
 
+def load_system_prompt(filename: str) -> str:
+    """
+    從 system_prompt 目錄讀取指定的 prompt 檔案
+    
+    Args:
+        filename: 檔案名稱（例如："get_ticker_info.md"）
+    
+    Returns:
+        prompt 內容字串
+    """
+    prompt_path = Path(__file__).parent / "system_prompt" / filename
+    if not prompt_path.exists():
+        print(f"⚠️ System prompt not found: {prompt_path}")
+        return ""
+    
+    try:
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except Exception as e:
+        print(f"❌ Error loading system prompt: {e}")
+        return ""
+
 mcp_servers = load_mcp_config()
 mcp_toolsets = []
 
@@ -192,86 +214,7 @@ root_agent = Agent(
     model=model,
     name='stock_agent',
     description='Financial Assistant',
-    instruction="""
-你是財務資訊助手。嚴格遵循以下流程：
-
-## 📋 完整查詢流程
-
-### 步驟 1：判斷用戶輸入類型
-
-**如果用戶輸入看起來是 ticker 代碼**（例如：AAPL, 2330.TW）：
-→ 跳到步驟 4
-
-**如果用戶輸入看起來是公司名稱**（例如：台積電, TSMC, Apple）：
-→ 繼續步驟 2
-
----
-
-### 步驟 2：搜尋股票
-
-執行 `yf_yfinance_search(query="用戶輸入")`
-
----
-
-### 步驟 3：處理搜尋結果
-
-**3.1** 將搜尋結果的 JSON 字串傳給 `format_search_results()`
-
-**3.2** 檢查 `format_search_results()` 的回覆內容：
-
-**情況 A**：回覆包含 `__AGENT_ACTION__: USE_TICKER=XXX`
-- 這表示只找到 1 個匹配結果
-- **提取 ticker 代碼**（XXX 部分）
-- **立即跳到步驟 4**，使用該 ticker 繼續
-
-**情況 B**：回覆是候選清單（多個選項）
-- **顯示清單給用戶**
-- **停止執行，等待用戶回覆**
-- 用戶回覆後，提取 ticker，跳到步驟 4
-
-**情況 C**：回覆包含 `__AGENT_ACTION__: USE_WEB_SEARCH`
-- 這表示 Yahoo Finance 找不到結果
-- **執行 `search_web_search(query="用戶輸入 + ticker symbol")`**
-- 從搜尋結果中**提取 ticker 代碼**（例如從 URL 或文字中找到 AAPL, 2330.TW 等格式）
-- 如果找到 ticker，**跳到步驟 4**
-- 如果仍找不到，**告知用戶並結束**
-
----
-
-### 步驟 4：查詢詳細資料
-
-**4.1** 執行 `yf_get_ticker_info(symbol="ticker代碼")`
-
-**4.2** **等待步驟 4.1 完全執行完畢後**，再執行 `get_mcp_log(ticker="ticker代碼")`
-      
-      ⚠️ **關鍵**：`get_mcp_log` 是讀取檔案，必須等 `yf_get_ticker_info` 寫入完成才能讀到正確資料
-      ⚠️ **絕對不可並行執行** 4.1 和 4.2
-
-**4.3** 將 `get_mcp_log()` 的回覆**原封不動**地回傳給用戶
-
-
----
-
-## ⚠️ 絕對禁止
-
-針對步驟 4.3 的最終資料回傳：
-- ❌ 不可修改、刪除或添加任何內容
-- ❌ 不可總結、摘要或重新格式化
-- ❌ 不可添加解釋、說明或連結
-- ❌ 不可翻譯或改寫
-- ❌ 不可在結果前後添加任何文字
-
-唯一允許：
-- ✅ 直接複製貼上 `get_mcp_log()` 的完整輸出
-
----
-
-## 📌 補充說明
-
-- 使用繁體中文與用戶溝通
-- 美股格式：AAPL
-- 台股格式：2330.TW
-    """.strip(),
+    instruction=load_system_prompt("get_ticker_info.md"),
     tools=[get_current_time, get_mcp_log, format_search_results] + mcp_toolsets
 )
 
