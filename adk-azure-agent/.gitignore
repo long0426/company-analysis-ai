@@ -1,0 +1,28 @@
+# 敏感資料，請勿提交到 Git
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虛擬環境
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# uv
+.uv/
+
+# ADK
+.adk/
+
+adk-azure-agent/my_agent/mcp_logs

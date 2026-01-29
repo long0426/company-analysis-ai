@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "yfinance": {
+      "command": "uvx",
+      "args": ["yfmcp@latest"]
+    }
+  }
+}

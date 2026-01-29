@@ -1,0 +1,162 @@
+"""
+Google ADK Agent with Azure OpenAI Integration
+
+這個 Agent 展示如何透過 LiteLLM connector 整合 Azure OpenAI。
+"""
+
+from google.adk.agents.llm_agent import Agent
+from google.adk.models import LiteLlm
+from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
+from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
+from mcp import StdioServerParameters
+import os
+import asyncio
+from dotenv import load_dotenv
+from datetime import datetime
+
+# 載入環境變數
+load_dotenv()
+
+
+# ============================================================================
+# Tools 定義
+# ============================================================================
+
+def get_current_time(city: str) -> str:
+    """
+    取得指定城市的當前時間（示範用 tool）。
+    
+    Args:
+        city: 城市名稱
+        
+    Returns:
+        當前時間字串
+    """
+    # 這是一個簡單的模擬實作
+    # 在真實應用中，你可以整合真實的時區 API
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"Current time: {current_time}")
+    
+    return current_time
+
+
+
+# ============================================================================
+# Azure OpenAI 配置
+# ============================================================================
+
+# 從環境變數讀取配置
+azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+
+# 配置環境變數供 LiteLLM 使用
+# LiteLLM 會自動讀取這些標準環境變數
+# os.environ["AZURE_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
+# os.environ["AZURE_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
+# os.environ["AZURE_API_VERSION"] = os.getenv("AZURE_OPENAI_API_VERSION")
+
+# 建立 LiteLLM model wrapper
+litellm_model = LiteLlm(model="azure/gpt-4o")
+
+
+# ============================================================================
+# MCP Toolset 配置
+# ============================================================================
+
+# 配置 Yahoo Finance MCP Server 連接參數
+# 使用 uvx 啟動 narumi/yfinance-mcp
+yfinance_server_params = StdioServerParameters(
+    command="uvx",
+    args=["yfmcp@latest"],
+    env=None
+)
+
+yfinance_mcp_params = StdioConnectionParams(
+    server_params=yfinance_server_params,
+    timeout=30.0  # 30 秒超時（首次啟動需要下載套件）
+)
+
+# 建立 Yahoo Finance MCP Toolset
+yfinance_toolset = McpToolset(
+    connection_params=yfinance_mcp_params,
+    tool_name_prefix="yf_",  # 工具名稱前綴，避免命名衝突
+)
+
+
+# ============================================================================
+# Agent 定義
+# ============================================================================
+
+root_agent = Agent(
+    model=litellm_model,
+    name='azure_agent',
+    description='財務資訊查詢助手',
+    instruction="""
+你是財務資訊查詢助手。
+
+回應規則：
+- 使用繁體中文
+- 提供資料來源
+- 保持專業友善
+
+股票代碼格式：
+- 美股：AAPL
+- 台股：2330.TW
+    """.strip(),
+    tools=[get_current_time, yfinance_toolset]
+)
+
+
+# ============================================================================
+# MCP Server 預載函數
+# ============================================================================
+
+async def preload_mcp_server():
+    """
+    預先載入 MCP Server，避免第一次查詢時的延遲。
+    這會觸發 uvx yfmcp@latest 的下載和啟動。
+    """
+    print("\n正在預載 Yahoo Finance MCP Server...")
+    print("（首次啟動可能需要 15-20 秒下載套件）")
+    try:
+        # 直接透過 MCP Session Manager 建立連線
+        session = await yfinance_toolset._mcp_session_manager.create_session()
+        
+        # 取得工具列表
+        result = await session.list_tools()
+        tools_count = len(result.tools) if hasattr(result, 'tools') else 0
+        
+        print(f"✓ MCP Server 預載成功！")
+        print(f"  可用工具數量: {tools_count}")
+        if hasattr(result, 'tools') and result.tools:
+            print(f"  工具列表: {[t.name for t in result.tools[:3]]}...")
+        
+        return True
+    except Exception as e:
+        print(f"✗ MCP Server 預載失敗: {e}")
+        print("  提示：第一次查詢時將自動啟動 MCP Server")
+        return False
+
+
+# ============================================================================
+# 用於測試的主程式
+# ============================================================================
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("Azure OpenAI Agent 測試")
+    print("=" * 60)
+    print(f"Agent 名稱: {root_agent.name}")
+    print(f"Agent 描述: {root_agent.description}")
+    print(f"可用工具數量: {len(root_agent.tools)}")
+    print("  - 基本工具: get_current_time")
+    print("  - Yahoo Finance MCP Toolset (包含多個財務查詢工具)")
+    print("=" * 60)
+    
+    # 預載 MCP Server
+    asyncio.run(preload_mcp_server())
+    
+    print("\n" + "=" * 60)
+    print("提示：使用以下命令啟動 Agent：")
+    print("  CLI 模式: uv run adk run my_agent")
+    print("  Web UI:  uv run adk web --port 9000")
+    print("=" * 60)

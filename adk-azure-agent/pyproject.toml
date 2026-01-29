@@ -1,0 +1,11 @@
+[project]
+name = "adk-azure-agent"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "google-adk==1.21.0",
+    "mcp>=1.2.0",
+    "litellm>=1.59.8",
+    "yfinance>=0.2.52",
+]
