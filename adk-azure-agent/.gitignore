@@ -25,4 +25,4 @@ ENV/
 # ADK
 .adk/
 
-adk-azure-agent/my_agent/mcp_logs
+adk-azure-agent/my_agent/mcp_logs/*

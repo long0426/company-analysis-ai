@@ -9,11 +9,33 @@ from datetime import datetime
 from .mcp_toolset_wrapper import patch_mcp_tool
 patch_mcp_tool()
 
+# 匯入 MCP Log 讀取工具
+from .mcp_log_reader import read_latest_mcp_response, format_mcp_response
+
 load_dotenv()
 
 def get_current_time() -> str:
     """取得當前時間"""
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+def get_mcp_log(ticker: str) -> str:
+    """
+    讀取指定 ticker 的最新 MCP 回覆記錄
+    
+    Args:
+        ticker: 股票代碼（例如：2330.TW, AAPL）
+    
+    Returns:
+        MCP 回覆的原始資料（JSON 格式字串）
+    """
+    import json
+    response = read_latest_mcp_response(ticker)
+    if not response:
+        return f"❌ 找不到 {ticker} 的記錄"
+    
+    # 用 code block 包裝 JSON，確保格式正確
+    json_str = json.dumps(response, ensure_ascii=False, indent=2)
+    return f"```json\n{json_str}\n```"
 
 # ============================================================================
 # Yahoo Finance MCP 設定
@@ -47,14 +69,29 @@ root_agent = Agent(
     name='stock_agent',
     description='Financial Assistant',
     instruction="""
-你是一個專業的財務分析助手。
+你是財務資訊助手。
 
-請遵循以下規則：
-1. 使用**繁體中文**回答。
-2. 股票代碼：美股直接用代碼（如 AAPL），台股加後綴（如 2330.TW）。
-3. 如果工具回傳英文，請翻譯成繁體中文。
+當用戶查詢股票時，請**嚴格遵守**以下步驟：
+
+1. 使用 Yahoo Finance 工具查詢（例如：yf_get_ticker_info）
+2. 使用 get_mcp_log 讀取剛才的記錄
+3. **原封不動**地回傳 get_mcp_log 的完整結果
+
+**絕對禁止**：
+- ❌ 修改、刪除或添加任何內容
+- ❌ 總結、摘要或重新格式化
+- ❌ 添加任何解釋、說明或連結
+- ❌ 翻譯或改寫任何文字
+- ❌ 在結果前後添加任何文字
+
+**唯一允許**：
+- ✅ 直接複製貼上 get_mcp_log 的完整輸出
+
+**基本規則**：
+- 使用繁體中文
+- 美股：AAPL，台股：2330.TW
     """.strip(),
-    tools=[get_current_time, yfinance_toolset]
+    tools=[get_current_time, get_mcp_log, yfinance_toolset]
 )
 
 print("✓ Agent loaded with Yahoo Finance MCP (ADK 1.21.0)")
