@@ -15,6 +15,35 @@ from .mcp_log_reader import read_latest_mcp_response, format_mcp_response
 
 load_dotenv()
 
+# 新增驗證工具
+from .tools.format_key_message import validate_key_message
+from .tools.prompt_verifier import extract_data_for_prompt
+from .tools.calculate_upside import calculate_upside_potential
+from .tools.save_output import save_agent_response
+
+def extract_data_tool(ticker: str) -> str:
+    """
+    從 mcp_logs 提取已記錄的關鍵數據，用於撰寫報告
+    此工具會彙整多個 log 檔案中的數據 (包含 Yahoo Finance 和 Web Search)
+    
+    Args:
+        ticker: 股票代碼
+        
+    Returns:
+        JSON 格式的整合數據 (extracted_data)
+    """
+    import json
+    try:
+        data = extract_data_for_prompt(ticker)
+        # 只回傳 extracted_data 和 source_map，避免过多雜訊
+        result = {
+            "extracted_data": data["extracted_data"],
+            "source_map": data["source_map"]
+        }
+        return json.dumps(result, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return f"Error extracting data: {str(e)}"
+
 def get_current_time() -> str:
     """取得當前時間"""
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -173,9 +202,9 @@ mcp_toolsets = []
 
 # 定義工具前綴映射 (因為 mcp_config.json 不支援非標準欄位)
 prefix_mapping = {
-    "yfinance": "yf_",
-    "web-search": "search_",
-    "fetch-webpage": "fetch_"
+    "yfinance": "yf_",      # Keep yf_ prefix for clarity
+    "web-search": "web_",   # search_search -> web_search
+    "fetch-webpage": "url_" # fetch_fetch -> url_fetch
 }
 
 for name, config in mcp_servers.items():
@@ -214,8 +243,9 @@ root_agent = Agent(
     model=model,
     name='stock_agent',
     description='Financial Assistant',
-    instruction=load_system_prompt("get_ticker_info.md"),
-    tools=[get_current_time, get_mcp_log, format_search_results] + mcp_toolsets
+    # instruction=load_system_prompt("get_ticker_info.md"),
+    instruction=load_system_prompt("generate_key_message.md"),
+    tools=[get_current_time, get_mcp_log, format_search_results, extract_data_tool, validate_key_message, calculate_upside_potential, save_agent_response] + mcp_toolsets
 )
 
 print(f"✓ Agent initialized with {len(mcp_toolsets)} MCP toolsets")
