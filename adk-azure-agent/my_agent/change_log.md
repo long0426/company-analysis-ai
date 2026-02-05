@@ -44,6 +44,25 @@
 - **Action**: Refined Goal
 - **Description**: 將「產出目標」從「分析短文」修改為「生成並寫入檔案」，並增加負面提示「請勿直接輸出給用戶」。
 - **Reason**: 解決 Agent 因誤解目標而直接將內容輸出到對話視窗，導致流程中斷的問題。
+- **File**: `system_prompt/generate_key_message.md`
+- **Action**: Refined Template
+- **Description**: 在分析短文模板與提取步驟說明中加入明確的 JSON 欄位名稱映射 (如 `currentPrice`, `targetMedianPrice`, `beta`, `recommendationMean`)，以降低 Agent 抓錯數據的風險。
+- **Reason**: 針對部分欄位 (如目標價) 可能被誤用 (如誤用 52週新高) 的情況進行修正。
+
+- **File**: `my_agent/mcp_log_reader.py`
+- **Action**: Modified Tool Logic
+- **Description**: 修正 `get_mcp_log` (read_latest_mcp_response) 的邏輯，使其不再只回傳「最新的一個」檔案，而是彙整近期所有 Log。
+- **Reason**: 解決 Agent 分次執行 Info 與 News 時，無法同時看見兩份資料，導致無限重試或誤判資料缺失的問題。
+
+- **File**: `system_prompt/generate_key_message.md`, `system_prompt/get_ticker_info.md`
+- **Action**: Added Role Definition
+- **Description**: 在 Prompt 開頭新增「Sub-Agent 角色定義」，明確告知 Agent 受 Orchestrator 管理，且必須透過 Transfer 結束任務。
+- **Reason**: 強化 Agent 的階層意識，避免其誤將自己視為 User Interface 而自行結束對話。
+
+- **File**: `system_prompt/generate_key_message.md`
+- **Action**: Enforced Tool Order
+- **Description**: 在「資料提取 (Step 2)」前加入嚴格檢查點，禁止在 `yf_get_ticker_info` 與 `yf_get_ticker_news` 到齊前呼叫 `extract_data_tool`。
+- **Reason**: 防止 Agent 搶快提取，導致使用不完整的資料進行分析。
 ## 2026-02-03
 - **File**: `system_prompt/generate_key_message.md`, `agent.py`, `tools/calculate_upside.py`
 - **Action**: Modified & Added

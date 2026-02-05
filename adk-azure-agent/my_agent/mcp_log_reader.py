@@ -9,13 +9,14 @@ from typing import Optional, Dict, Any
 
 def read_latest_mcp_response(ticker: str) -> Optional[Dict[str, Any]]:
     """
-    讀取指定 ticker 的最新 MCP 回覆記錄
+    讀取指定 ticker 的近期所有 MCP 回覆記錄並彙整
+    (Fix: 不再只回傳這新的一個，而是回傳所有近期工具的執行結果彙整)
     
     Args:
         ticker: 股票代碼（例如：2330.TW, AAPL）
     
     Returns:
-        最新的 MCP response 內容，如果找不到則返回 None
+        彙整後的 Dict，key 為 tool_name，value 為該工具最新的 response
     """
     # MCP logs 目錄
     log_dir = Path(__file__).parent / "mcp_logs"
@@ -24,63 +25,75 @@ def read_latest_mcp_response(ticker: str) -> Optional[Dict[str, Any]]:
         return None
     
     # 尋找符合 ticker 的所有檔案
-    matching_files = []
+    candidate_files = []
     
     # 1. 搜尋 Ticker 專屬目錄 (新結構)
-    # 格式: {tool_name}_{time}.jsonl
     ticker_dir = log_dir / ticker
     if ticker_dir.exists():
-        matching_files.extend(list(ticker_dir.glob("*.jsonl")))
+        candidate_files.extend(list(ticker_dir.glob("*.jsonl")))
         
     # 2. 搜尋 Root 目錄 (舊結構 & unknown)
-    # 支援舊格式 mcp_{ticker}_*.jsonl 和新格式 mcp_{tool_name}_{ticker}_*.jsonl
-    files1 = list(log_dir.glob(f"mcp_{ticker}_*.jsonl"))
-    files2 = list(log_dir.glob(f"mcp_*_{ticker}_*.jsonl"))
-    matching_files.extend(files1 + files2)
-    matching_files = list(set(matching_files))
+    candidate_files.extend(list(log_dir.glob(f"mcp_{ticker}_*.jsonl")))
+    candidate_files.extend(list(log_dir.glob(f"mcp_*_{ticker}_*.jsonl")))
+    candidate_files = list(set(candidate_files))
     
-    if not matching_files:
+    if not candidate_files:
         return None
     
-    # 按檔名排序（時間戳記），取最新的
-    # 注意：不同格式的檔名排序可能不準確，理想情況下應讀取內容時間，但為求效率暫依檔名
-    latest_file = sorted(matching_files)[-1]
+    # 彙整結果的容器
+    aggregated_response = {}
     
-    # 讀取最後一行（最新的記錄）
-    try:
-        with open(latest_file, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-            if not lines:
-                return None
-            
-            # 解析最後一行的 JSON
-            last_entry = json.loads(lines[-1])
-            
-            # 提取 response 欄位
-            raw_response = last_entry.get('response')
-            if not raw_response:
-                return None
-            
-            # MCP response 的實際資料在 content[0].text 或 structuredContent.result 中
-            # 並且是 JSON 字串，需要再解析一次
-            if 'content' in raw_response and raw_response['content']:
-                # 從 content[0].text 提取
-                content_text = raw_response['content'][0].get('text', '')
-                if content_text:
-                    return json.loads(content_text)
-            
-            elif 'structuredContent' in raw_response:
-                # 從 structuredContent.result 提取
-                result_text = raw_response['structuredContent'].get('result', '')
-                if result_text:
-                    return json.loads(result_text)
-            
-            # 如果都不符合，返回原始 response
-            return raw_response
-            
-    except (json.JSONDecodeError, IOError) as e:
-        print(f"⚠️ Error reading MCP log: {e}")
-        return None
+    # 依時間排序 (舊->新)，確保新的覆蓋舊的
+    sorted_files = sorted(candidate_files)
+    
+    for file_path in sorted_files:
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+                if not lines:
+                    continue
+                
+                # 解析最後一行的 JSON
+                last_entry = json.loads(lines[-1])
+                tool_name = last_entry.get('tool_name')
+                raw_response = last_entry.get('response')
+                
+                if not tool_name or not raw_response:
+                    continue
+                
+                # 解析 Content
+                parsed_content = None
+                
+                if isinstance(raw_response, dict):
+                    if 'content' in raw_response and raw_response['content']:
+                        # 從 content[0].text 提取
+                        content_text = raw_response['content'][0].get('text', '')
+                        if content_text:
+                            try:
+                                parsed_content = json.loads(content_text)
+                            except:
+                                parsed_content = content_text
+                    elif 'structuredContent' in raw_response:
+                        # 從 structuredContent.result 提取
+                        result_text = raw_response['structuredContent'].get('result', '')
+                        if result_text:
+                            try:
+                                parsed_content = json.loads(result_text)
+                            except:
+                                parsed_content = result_text
+                
+                # 如果無法解析，就用原始的
+                if parsed_content is None:
+                    parsed_content = raw_response
+
+                # 存入彙整字典 (Key 為工具名稱，確保每個工具只留最新一份)
+                aggregated_response[tool_name] = parsed_content
+                
+        except Exception as e:
+            print(f"⚠️ Error reading MCP log {file_path}: {e}")
+            continue
+
+    return aggregated_response
 
 
 def format_mcp_response(response: Dict[str, Any], ticker: str) -> str:

@@ -13,6 +13,7 @@
 > - 嚴格禁止使用 LLM 預訓練知識或未經 mcp_logs 記錄的資訊。
 > - 所有數字、事件、論點必須能追溯到 `mcp_logs/<ticker>/` 目錄下的具體欄位 (主要來自 `yf_get_ticker_info` 與 `yf_get_ticker_news`)。
 > - 若資料不可得，**請參閱「缺漏資料處理原則」進行改寫**，禁止編造數值。
+> - 🛑 **嚴格禁止搶快提取 (Premature Extraction)**：在確認 `yf_get_ticker_info` 和 `yf_get_ticker_news` 都**成功執行完畢**之前，**絕對禁止**呼叫 `extract_data_tool`。違者視為重大違規。
 
 > [!WARNING]
 > **格式與驗證限制**
@@ -87,20 +88,23 @@
 
 ### 步驟 2：資料提取與處理 (Data Extraction)
 
+**執行前提 (Prerequisite)**：由此步驟開始前，**必須**確認 `yf_get_ticker_info` 和 `yf_get_ticker_news` 都已執行。
+
 1. **資料完整性檢查**：
    - 呼叫 `get_mcp_log(ticker)`。
-   - **[檢查]** 搜尋 Log 內容：
+   - **[檢查]** 搜尋 Log 內容 (現在會回傳所有近期結果)：
      - 是否含有 `yf_get_ticker_info` 結果？ (Yes/No)
      - 是否含有 `yf_get_ticker_news` 結果？ (Yes/No)
-     - **若任一為 No**：**資料不完整 (Missing Data)，退回步驟 1，補呼叫缺漏的工具**。
-     - **禁止**強行進行提取。
+     - **若任一為 No**：**資料不完整 (Missing Data)，STOP! 退回步驟 1，補呼叫缺漏的工具**。
+     - **禁止**在資料不齊全時強行進行提取。
 
 2. **提取資訊 (`extract_data_tool`)**：
-   - 確認資料完整後，呼叫 `extract_data_tool(ticker)`。
-   - **股價現況**：價格、目標價 (來源: `yf_get_ticker_info`)。
+   - **只有當上述檢查通過 (Yes + Yes) 時，才允許呼叫此工具。**
+   - 呼叫 `extract_data_tool(ticker)`。
+   - **股價現況**：價格 (currentPrice)、目標價 (targetMedianPrice) (來源: `yf_get_ticker_info`)。
    - **核心論點**：財務成長數據 + 近期重大新聞 (來源: `yf_get_ticker_info` 財報數據 + `yf_get_ticker_news` 新聞摘要)。
-   - **主要風險**：Beta 值 (來源: `yf_get_ticker_info`) + 新聞中提到的潛在風險 (來源: `yf_get_ticker_news`)。
-   - **態度**：券商評等與家數 (來源: `yf_get_ticker_info`)。
+   - **主要風險**：Beta 值 (beta) (來源: `yf_get_ticker_info`) + 新聞中提到的潛在風險 (來源: `yf_get_ticker_news`)。
+   - **態度**：券商評等 (recommendationMean) 與家數 (numberOfAnalystOpinions) (來源: `yf_get_ticker_info`)。
 
 3. **計算上漲空間 (`calculate_upside_potential`)**：
    - **必須**呼叫 `calculate_upside_potential(current_price, target_price, ticker)`。
@@ -145,12 +149,12 @@
 
 ## 📝 內容組合模板
 
-請依以下邏輯組合（括號內為字數參考）：
+請依以下邏輯組合：
 
-> [公司]當前股價[價格]，相對[目標價]仍有[空間]%上漲空間。[核心論點：結合財務成長與新聞摘要重大事件]。然而，[主要風險：Beta波動、產業競爭或地緣政治]。[家數]家券商平均評等為[評等]，[分析師態度簡述]。
+> [公司]當前股價[價格 (currentPrice)]，相對[目標價 (targetMedianPrice)]仍有[空間]%上漲空間。[核心論點：結合財務成長與新聞摘要重大事件]。然而，[主要風險：Beta波動 (beta)、產業競爭或地緣政治]。[家數 (numberOfAnalystOpinions)]家券商平均評等為[評等 (recommendationMean)]，[分析師態度簡述]。
 
 **💡 缺漏資料處理原則：**
-- **若目標價 (Target Price) 為 N/A**：不得提及「上漲空間」或「目標價」，請改用質性描述（如：分析師看法分歧/保守）。
+- **若目標價 (targetMedianPrice) 為 N/A**：不得提及「上漲空間」或「目標價」，請改用質性描述（如：分析師看法分歧/保守）。
 - **若 News 無重大新聞**：核心論點僅聚焦基本面 (Yahoo Finance 數據)，並在段落後簡短標註 `(近期無重大新聞)` 以示負責。
 - **模板調整權**：當資料缺漏時，允許且必須調整上述模板結構，以確保文句通順，不留空白或 N/A 佔位符。
 
