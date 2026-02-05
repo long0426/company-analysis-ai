@@ -75,8 +75,15 @@ class McpCallLogger:
         }
         
         # 寫入 JSONL 格式
+        # 寫入 JSONL 格式
         with open(log_file, 'a', encoding='utf-8') as f:
             f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+            
+        # [NEW] 同時輸出到 Terminal 讓用戶確認
+        status = "✅" if success else "❌"
+        print(f"{status} [MCP] Call {tool_name} (ticker={ticker})")
+        if error:
+            print(f"      Error: {error}")
     
     def _serialize(self, obj: Any) -> Any:
         """將物件序列化為 JSON 可處理的格式"""

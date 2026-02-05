@@ -234,18 +234,78 @@ for name, config in mcp_servers.items():
         print(f"❌ Failed to load MCP server {name}: {e}")
 
 # ============================================================================
-# Agent 定義
+# Model Initialization
 # ============================================================================
 
 model = LiteLlm(model="azure/gpt-4o")
 
+# ============================================================================
+# Sub-Agents
+# ============================================================================
+
+discovery_agent = Agent(
+    model=model,
+    name='discovery_agent',
+    description='負責 Ticker 探索與資料獲取。擁有 Yahoo Finance 與 Web Search 工具。',
+    instruction=load_system_prompt("get_ticker_info.md"),
+    tools=[get_current_time, get_mcp_log, format_search_results, save_agent_response] + mcp_toolsets
+)
+
+analysis_agent = Agent(
+    model=model,
+    name='analysis_agent',
+    description='負責分析資料並生成關鍵訊息。擁有資料讀取與分析工具。',
+    instruction=load_system_prompt("generate_key_message.md"),
+    tools=[
+        get_current_time, get_mcp_log, extract_data_tool, 
+        validate_key_message, calculate_upside_potential, 
+        save_agent_response, format_search_results
+    ] + mcp_toolsets
+)
+
+# ============================================================================
+# Core Agent (Orchestrator)
+# ============================================================================
+
+try:
+    from google.adk.tools import ToolContext
+except ImportError:
+    ToolContext = Any
+
+def read_agent_response_file(ticker: str, tool_context: ToolContext = None) -> str:
+    """
+    Step 3: 讀取最終報告檔案內容。
+    
+    Args:
+        ticker: 股票代碼 (必須與寫入時一致)
+        tool_context: ADK 自動注入 (用於獲取 SessionID)
+    """
+    try:
+        # 獲取 Session ID
+        session_id = "unknown_session"
+        if tool_context and hasattr(tool_context, 'session') and tool_context.session:
+            session_id = tool_context.session.id
+                
+        # 建構檔名
+        filename = f"agent_response_{session_id}_{ticker}.md"
+        file_path = Path(__file__).parent / filename
+        
+        if not file_path.exists(): 
+            return f"尚未生成任何報告 (檔案不存在: {filename})。請確認 Ticker 是否正確或 Discovery Agent 是否執行成功。"
+            
+        return file_path.read_text(encoding="utf-8")
+    except Exception as e:
+        return f"Error reading file: {str(e)}"
+
+# 注意：Orchestrator 不直接執行任務，而是調度給子 Agent
 root_agent = Agent(
     model=model,
     name='stock_agent',
-    description='Financial Assistant',
-    # instruction=load_system_prompt("get_ticker_info.md"),
-    instruction=load_system_prompt("generate_key_message.md"),
-    tools=[get_current_time, get_mcp_log, format_search_results, extract_data_tool, validate_key_message, calculate_upside_potential, save_agent_response] + mcp_toolsets
+    description='Financial Analysis Orchestrator',
+    instruction=load_system_prompt("orchestrator.md"),
+    # 在這裡註冊 sub_agents，ADK 會自動提供 Transfer 工具
+    sub_agents=[discovery_agent, analysis_agent],
+    tools=[read_agent_response_file]
 )
 
-print(f"✓ Agent initialized with {len(mcp_toolsets)} MCP toolsets")
+print(f"✓ Orchestrator initializes with {len(root_agent.sub_agents)} sub-agents")

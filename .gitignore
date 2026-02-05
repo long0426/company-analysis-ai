@@ -1,2 +1,3 @@
 adk-azure-agent/my_agent/mcp_logs/
 adk-azure-agent/agent_response.json
+agent_response_*.md

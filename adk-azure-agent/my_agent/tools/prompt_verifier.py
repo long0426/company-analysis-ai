@@ -278,10 +278,9 @@ def verify_prompt_data(ticker: str, prompt_content: str) -> str:
     logs_used = data["logs_used"]
     step2_requirement = analyze_step2_logs(ticker)
     
-    # 1. 提取 Prompt 中的所有數字 (包含小數、百分比、金錢符號)
-    # 簡單 Regex: 捕捉連續的數字，可能包含小數點
-    # 忽略年份 (2025, 2026) ? 不，年份也應該有來源
-    numbers = re.findall(r'-?\d+\.?\d*', prompt_content)
+    # 1. 提取 Prompt 中的所有數字 (包含小數、百分比、金錢符號、千分位逗號)
+    # 修改 Regex 以支援千分位 (e.g. 1,800)
+    numbers = re.findall(r'-?\d+(?:,\d{3})*(?:\.\d+)?', prompt_content)
     
     matched = []
     unmatched = []
@@ -299,12 +298,15 @@ def verify_prompt_data(ticker: str, prompt_content: str) -> str:
             
     # 檢查每個數字
     for num_str in numbers:
-        # 跳過過短的數字 (如 1, 2 用於列表) ? 
-        if len(num_str) == 1: 
+        # 移除逗號以便處理
+        clean_num_str = num_str.replace(',', '')
+        
+        # 跳過過短的數字 (如 1, 2 用於列表)
+        if len(clean_num_str) == 1: 
             continue
             
         try:
-            val = float(num_str)
+            val = float(clean_num_str)
             found = False
             source = ""
             
